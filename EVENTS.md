@@ -295,6 +295,37 @@ Reminder delivery (popup/email).
 
 ---
 
+### `ksf_event_closed` — Planned (BR-007, design approved)
+
+Broadcast fired by Calendar AFTER an attendance/work event transitions to
+`closed` (committed). Payload = the canonical EventClosedDto (event_id, title,
+event_type, location, started_at, closed_at, user_id, project_id?, task_id?,
+sales_order_id?, linked_entities[], attendee_emails[], closed_by). Re-close is a
+no-op. Contract: FR-CAL-007-001/002, ARCH-007-event-close-workflow-design.md.
+
+**Emitter:** ksf_FA_Calendar (to implement per FR-CAL-007-002)
+**Listeners (to implement):**
+- `ksf_FA_Timesheets` — bulk member time (FR-TIME-007-002/003)
+- `ksf_FA_TravelExpense` — new-or-existing expense (FR-EXPENSE-007-001)
+- `ksf_FA_ProjectManagement` — task time-window close (FR-PM-007-002)
+- `ksf_FA_Warehouse` — pick-ready re-broadcast on sales-order hybrids (FR-WH-007-001)
+
+---
+
+### `ksf_event_classify_attendees` — Planned (BR-007, design approved)
+
+Read-only request on the close flow: any subscriber asks it to partition the
+DTO's `attendee_emails[]` into `member` vs `external`. Responders (PM, HRM,
+CRM, Teams/Warehouse) append only emails they resolve in their OWN identity
+space; caller aggregates (member wins; unclassified external; empty = all
+member). Contract: FR-CAL-007-003, ARCH-007-event-close-workflow-design.md.
+
+**Callers (to implement):** ksf_FA_Timesheets subscriber (FR-TIME-007-002/003)
+**Responders (to implement):** ksf_FA_ProjectManagement (FR-PM-007-001),
+`ksf_FA_HRM` (FR-HRM-007-001), `ksf_FA_CRM` (FR-CRM-007-001)
+
+---
+
 ## 6. Project & Timesheet Events
 
 Emitter-only group — all from `ksf_FA_Timesheets` (`TimesheetService.php`,
@@ -441,6 +472,9 @@ and have no dev tree source — events cannot be verified.
 | `suggested_po_created` | Planned | — | — |
 | `grn_received` | Planned | — | — |
 | `po_created` | Planned | — | — |
+| `ksf_event_closed` | **Planned** | Calendar (BR-007) | Timesheets, TravelExpense, PM, Warehouse |
+| `ksf_event_classify_attendees` | **Planned** | (subscriber callers, BR-007) | PM, HRM, CRM |
+| `ksf_wh_pick_ready` | **Active** | Warehouse subscriber (`ksf_event_closed`) | (pick flow) |
 
 ---
 

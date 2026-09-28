@@ -33,10 +33,15 @@ switch to `ksf_payment_destinations/` immediately.
 - **PHP 7.3 is the cross-module compatibility floor** (current prod runs 7.3 on
   Fedora 30 until a web container is stood up; the FA container runtime is 7.4).
   See `AGENTS_ARCH.md` §1.
-- **ksf_FA_Common is now a pure Composer/Packagist package** (v1.0.9), not an FA
+- **ksf_FA_Common is now a pure Composer/Packagist package** (v1.0.11), not an FA
   module. It was gutted to a no-op module shell. Owning modules (RBAC, CRM,
   Calendar, HRM, Assets) register/unregister their `ksf_contact_types` on
   activate/deactivate via embedded `sql/retag_contact_types.sql`.
+- **ComposerDependencies bootstrap is per-module**: modules copy
+  `ksf_fa_common/src/Utils/ComposerDependencies.template.php` to their root and
+  replace `MODULENAME` in the namespace; the guard is namespace-scoped so unrenamed
+  (forgotten `MODULENAME`) copies — and the package's own `Common\Utils` copy — can
+  never redeclare or clobber. Details in `AGENTS_ARCH.md` §7.
 - **Square**: composer.json `config.platform.php = 7.4.33` pinned (commit
   `b0ef4da`) for the PHP 7.4 container; lock regeneration is blocked locally on
   the private `ksfraser/import-staging` package.
@@ -237,3 +242,41 @@ registry write). Symptom: activation "does nothing". On the UAT box the
 workaround was manual activation (schema via raw SQL, `active => true` set
 directly in both registries). Proper fix is order-independent guarded
 loading in `src/autoload.php`.
+
+**Rootless podman single-file binds silently absent — the "nothing happens"
+activation trap (diagnosed 2026-09)**: on the rootless ksf_fa instance (podman
+under user `kevin`), the ksf-fa container appeared to have all 6 binds per
+`podman inspect`, but the **single-file** binds (config_db.php,
+installed_extensions.php, default.css) were NOT effective — `/proc/mounts` showed
+only the 3 directory binds. So FA wrote the RO git-tracked
+`FA/2.4.3/installed_extensions.php` as the global registry and failed with
+"Cannot open the extension setup file '../installed_extensions.php' for writing."
+Root cause was stale recipes with lowercase `../fa/…` paths + a `fa_data` named
+volume that didn't exist. Fix = recreate the container; a fresh create applies
+the file binds (legacy `compose.yaml` deleted, `start-fa.sh` rewritten). Rule:
+after any container create/modify, verify with
+`podman exec <c> grep -l config_db /proc/mounts` — don't trust `inspect`.
+
+**FA theme customization (decided 2026-09, cross-module)**
+
+Per-pod theme overlays **mirror the native FA tree** (`/var/www/html`), so the
+mount paths are the real FA locations. Inside each pod dir
+(`FA/<pod>/themes/default/`) we keep:
+
+- `default.css` — the **canonical** file, bind-mounted RW into the container at
+  `/var/www/html/themes/default/default.css`. This is what the running app
+  loads (`user_theme()` default is `'default'`; CSS is
+  `$path_to_root/themes/default/default.css` via `includes/main.inc`).
+- `default.css.default` / `default.css.red` / `default.css.yellow` — **unmounted**
+  variants. On a fresh environment, copy the chosen variant onto the canonical
+  `default.css`; the recipe (ansible role `ksf.frontaccounting`, `fa_theme` var,
+  staged by `tasks/theme.yml`) automates this before container start.
+
+Decisions: private modules mount **only** the `default.css` file; do not overlay
+`renderer.php`/`index.php`/`images/` (those stay read-only from the `2.4.3`
+mount). Target look: **Integration = RED**, **UAT = YELLOW**, default = original
+BLUE. The recipe applies `default.css.<fa_theme>` → `default.css` (never edits
+the variants). Container mounts were historically split across
+`podman/ksf-compose.yaml` vs the ansible role's `frontaccounting-container.yml`;
+the two recipes currently differ — reconcile before trusting either as source
+of truth.

@@ -230,6 +230,60 @@ instead of a tab panel.
 
 ---
 
+## 11. App-shell + tab-controller SRPs (implemented — `ksfraser\FrontAccounting\Common\App`)
+
+The §7 roadmap's "app host" is now realized as two shared SRPs in `ksf-fa-common`,
+separating orchestration from presentation so modules stop hand-rolling routers.
+
+| Class                    | SRP                                 | Key API |
+|--------------------------|-------------------------------------|---------|
+| `AbstractAppShell`       | one app, many tabs                  | `registerTab(TabRegistration)`, `boot()`, `resolveView()`, `getSecurity()`, `renderMenu()`, `dispatch()`, `createController()` |
+| `AbstractTabController`  | one tab = summary table + entry form| `run()` → `handlePost()` + `renderSummaryTable()` + `renderEntryForm()` |
+| `TabRegistration`        | tab DTO                             | `(key, label, security, controllerClass, priority, order, pageFile, faType, options)` |
+| `TabRegistrationTrait`   | module-side registration            | `registerTabWithApp()`, `respondToAppRegister(&$data)` |
+
+**Register-with-me hook.** `AbstractAppShell::boot()` fires
+`hook_invoke_all('<appId>_register_tabs', $data)`. Any module responds by merging its
+`TabRegistration` (typically via `TabRegistrationTrait`), or an `AbstractPlugin` with
+`getTabRegistration()`. The shell merges core tabs + responded tabs + `PluginRegistry`.
+
+**Host page = thin router.** `index.php` resolves the view before `session.inc`, sets
+`$page_security`, then `page()` → `renderMenu()` → `dispatch()` → `end_page()`.
+`dispatch()` runs the controller's `run()` or includes a legacy `pageFile` fragment.
+
+**Controller convention.** Summary is a `MasterSummaryTable` (paging, edit/delete row
+actions, `preserve_params`); the entry form is always visible below it (blank for add,
+DTO-pre-filled for edit; Submit flips Save↔Update). Backed by overridables:
+`getFieldMetadata`, `listRows`, `countRows`, `findRecord`, `createRecord`,
+`updateRecord`, `deleteRecord`, `collectFormValues`, `blankValues`, `fkOptions`.
+Note: `formAction()` returns `REQUEST_URI` so `?view=` survives the POST, and
+`FieldForm::renderForm()` wants the **full** metadata array (it reads `['fields']`).
+`redirectAfterPost()` (PRG) also builds from `formAction()`, **not**
+`TabContext::redirectTarget()` (which uses `PHP_SELF` and drops the query string,
+bouncing the user to the app default tab after save/update/delete).
+
+**Legacy `pageFile` tabs must be fragments.** `dispatch()` includes the page script
+inside the shell's already-open `page()`/`end_page()`. A page file therefore must
+**not** call `page()`/`end_page()` itself and must **inherit** the host's
+`$path_to_root` (do not redefine it). HRM's `pages/*.php` follow this. CRM's original
+`pages/*.php` are **standalone** WebERP-style pages written for direct URL access:
+they redefine `$path_to_root = "../../.."` (relative to their own `pages/` dir) and
+call `page()`/`end_page()` themselves, so when routed through the shell their own
+relative includes resolve against the module root and the request dies mid-render
+(submenu shown, no body/footer). They are being converted to `AbstractTabController`
+subclasses one tab at a time (Customer Types first; e.g. `territories.php` still to do).
+
+**Pilot:** HRM Departments (`HrmAppShell` + `DepartmentsTabController`); full CRUD
+verified live. Rollout: CRM (Customer Types first), then PM.
+
+**Deployment gotcha (footer regression, 2026-09).** Modules that vendor `ksf-fa-common`
+as a **symlink** to `../../../ksf_FA_Common/` (e.g. `ksf_FA_Calendar`, `ksf_FA_Logging`)
+require `fa_modules/ksf_FA_Common/` to actually exist. When it is absent, the module's
+generated `autoload_classmap.php` still points at `.../ksf_FA_Common/src/Traits/...`;
+Composer includes the missing path and fatals mid-`<head>`, so the page renders body +
+menu but **no footer**. Fix: deploy `ksf_FA_Common` into `fa_modules/`. Prefer a real
+vendored copy (as HRM does) over a symlink that depends on a sibling module dir.
+
 ## Appendix A — editing this document (intentional-write ritual)
 
 1. `chmod 644` the canonical file (this affects every hardlink — same inode).

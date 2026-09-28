@@ -123,7 +123,13 @@ Defaults: `fa_version`, `pod_name`, `fa_env`, `fa_theme`, `fa_port`, `mysql_*`
 **Reconcile pending**: `podman/ksf-compose.yaml` and the role's
 `frontaccounting-container.yml` historically diverge; both must converge on the
 §3 mount set. podman-compose 1.0.6 is broken on `${VAR:-default}` top-level
-volume names → direct `podman run` is used in practice.
+volume names ("volume [...] not defined in top level"), so **direct `podman run`
+is the only practical path** — `podman/start-fa.sh` IS the verified rootless
+reproduction of the `ksf-compose.yaml` `frontaccounting` service (2026-09). The
+legacy `podman/compose.yaml` (declared a `fa_data` named volume and would have
+been auto-picked by bare `podman-compose up`) has been **deleted**; the unused
+`_fa_data`/`_iiapp_data`/`_stockmarket_python_data` named volumes were removed
+from `ksf-compose.yaml`.
 
 ## 9. The play
 
