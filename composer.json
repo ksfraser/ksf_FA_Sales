@@ -1,0 +1,22 @@
+{
+    "name": "ksfraser/ksf-fa-sales",
+    "description": "FrontAccounting Sales Adapter: CREATE_SALES_INVOICE responder",
+    "type": "fa-module",
+    "require": {
+        "php": ">=7.3"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^9.6"
+    },
+    "autoload": {
+        "psr-4": {
+            "Ksfraser\\FA\\Sales\\": "src/Ksfraser/FA/Sales/"
+        }
+    },
+    "config": {
+        "platform": {
+            "php": "7.4.33"
+        },
+        "sort-packages": true
+    }
+}
