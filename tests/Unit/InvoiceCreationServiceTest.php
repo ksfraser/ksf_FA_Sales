@@ -1,10 +1,10 @@
 <?php
 declare(strict_types=1);
 
-namespace Ksfraser\FA\Sales\Tests\Unit;
+namespace ksfraser\FrontAccounting\Sales\Tests\Unit;
 
-use Ksfraser\FA\Sales\Entity\InvoiceDTO;
-use Ksfraser\FA\Sales\Service\InvoiceCreationService;
+use ksfraser\FrontAccounting\Sales\Entity\InvoiceDTO;
+use ksfraser\FrontAccounting\Sales\Service\InvoiceCreationService;
 use PHPUnit\Framework\TestCase;
 
 /**

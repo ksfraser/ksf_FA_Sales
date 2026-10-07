@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-namespace Ksfraser\FA\Sales\Entity;
+namespace ksfraser\FrontAccounting\Sales\Entity;
 
 /**
  * InvoiceDTO — creation request payload for the CREATE_SALES_INVOICE responder.

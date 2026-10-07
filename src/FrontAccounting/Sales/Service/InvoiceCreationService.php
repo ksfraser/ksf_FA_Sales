@@ -1,9 +1,9 @@
 <?php
 declare(strict_types=1);
 
-namespace Ksfraser\FA\Sales\Service;
+namespace ksfraser\FrontAccounting\Sales\Service;
 
-use Ksfraser\FA\Sales\Entity\InvoiceDTO;
+use ksfraser\FrontAccounting\Sales\Entity\InvoiceDTO;
 
 /**
  * InvoiceCreationService — writes a native FA sales invoice from staged lines.
@@ -68,7 +68,7 @@ class InvoiceCreationService
             : $this->invoiceDueDate($customer['payment_terms'], $documentDate);
 
         // Leading backslash is required: an unqualified `new Cart` inside a namespaced
-        // file would resolve to Ksfraser\FA\Sales\Service\Cart and fatal.
+        // file would resolve to ksfraser\FrontAccounting\Sales\Service\Cart and fatal.
         $cart = new \Cart(ST_SALESINVOICE);
         $cart->trans_type = ST_SALESINVOICE;
         $cart->trans_no = 0;

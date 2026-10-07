@@ -10,7 +10,7 @@
     },
     "autoload": {
         "psr-4": {
-            "Ksfraser\\FA\\Sales\\": "src/Ksfraser/FA/Sales/"
+            "ksfraser\\FrontAccounting\\Sales\\": "src/FrontAccounting/Sales/"
         }
     },
     "config": {

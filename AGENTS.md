@@ -43,8 +43,57 @@ switch to `ksf_payment_destinations/` immediately.
   (forgotten `MODULENAME`) copies — and the package's own `Common\Utils` copy — can
   never redeclare or clobber. Details in `AGENTS_ARCH.md` §7.
 - **Square**: composer.json `config.platform.php = 7.4.33` pinned (commit
-  `b0ef4da`) for the PHP 7.4 container; lock regeneration is blocked locally on
-  the private `ksfraser/import-staging` package.
+  `b0ef4da`) for the PHP 7.4 container. The lock is no longer blocked — the
+  blocker was a phantom `ksfraser/import-staging` require (not on Packagist, and
+  the `ksfraser\FrontAccounting\ImportStaging\*` classes are autoloaded by the
+  `ksf_FA_ImportStagingProcessing` module's own vendor). Removed in commit
+  `493291f`; the vendor now resolves for 7.4 (http-foundation 5.4, csv 9.8).
+- **Vendor/runtime PHP mismatch is the top source of site-wide 500s.** The host
+  runs PHP 8.1 and the container 7.4, so a module without a
+  `config.platform.php` pin resolves for the wrong PHP. Symptoms are a
+  PHPUnit-10 eager-autoload `Parse error` (masked by FA's
+  `Call to undefined function end_page()`) or a `platform_check.php`
+  `E_USER_ERROR` naming a required PHP >= 8.1.2. Diagnose with
+  `ksf_Infrastructure/fa-modules-doctor.sh`, which probes the real container
+  rather than guessing package versions. Full procedure in
+  `ksf_Infrastructure/AGENTS_APPENDIX.md`.
+- **Per-environment port map (decided 2026-10-01) — the target layout.** Each
+  environment takes a base and each service a fixed slot offset, so a whole
+  stack can be relocated by changing one number:
+
+  | slot | service | prod | UAT | Integration | dev |
+  |---|---|---|---|---|---|
+  | base | *(reserved — `sso`/`kube`-class services)* | 8080 | 8090 | 9000 | 9010 |
+  | +1 | *(reserved)* | 8081 | 8091 | 9001 | 9011 |
+  | +2 | **FrontAccounting** | 8082 | 8092 | 9002 | 9012 |
+  | +3 | **Nextcloud** | 8083 | 8093 | 9003 | 9013 |
+  | +4 | **WordPress** | 8084 | 8094 | 9004 | 9014 |
+  | +5 | **phpMyAdmin** | 8085 | 8095 | 9005 | 9015 |
+
+  Slots `base` and `+1` are deliberately left unallocated because those are the
+  numbers other roles in `/root/.ansible/roles` want: `ksf.sso` binds `8080`
+  (`sso_http_port`), and `ksf.kube`/`ksf.suitecrm`/`mrlesmithjr.netdata` bind
+  `9000`. Leaving `base`/`+1` free means a stack can host those roles without
+  moving the application services. Two soft overlaps remain for *other* roles'
+  own defaults and only matter if those roles are added to a stack later:
+  `ksf.qbittorrent` (`qbittorrent_port: 8085`) and `ksf.ocrmypdf`
+  (`ocrmypdf_webservice_port: 8095`). MariaDB is not slotted yet — it currently
+  publishes `3307` (container) against the host's own `3306`.
+
+  **RUNNING OVERLAP — the live containers do NOT match this map yet.** The
+  ports below are pre-migration and are superseded by the table when the stacks
+  are rebuilt by the Ansible role. Do not "fix" a live pod by hand to match the
+  table; rebuild it.
+
+- **Two FA containers run at once and share one vendor tree.** Rootful
+  `ksfii_app-fa` on **8090** (overlay `FA/ksfii_app`) and rootless `ksf-fa` on
+  **8080** (overlay `FA/ksf_fa`, driven as `su - kevin -c`). **These two ports
+  are pre-migration leftovers, not the plan** — see the port map above. Both are PHP
+  7.4.33 and both bind-mount `ksf_Infrastructure/fa_modules` at
+  `/var/www/html/modules`, so a bad vendor breaks both, but extension activation
+  is **per-instance** (separate `company/<id>/installed_extensions.php`). A module
+  can be a live landmine on one pod and dead code on the other, so always check
+  both before deciding something is harmless.
 - **FA_ProductAttributes issue #52 (child not detected as read-only)** root cause
   found: two parallel, un-unified parent-relationship mechanisms. Full write-up
   is in that repo's `AGENTS.local.md` (migrated out of this file).
@@ -216,6 +265,38 @@ bind fix in the repo-local notes).
 - `activate_hooks($pkg, $comp, true)` then calls the module's
   `hooks_<pkg>::activate_extension($comp, false)`.
 
+**`Refresh=Update` is a full-state replace, not a delta.** The handler toggles
+every listed row: `$ext['active'] ^ check_value('Active'.$i)`. A module that is
+active but whose checkbox is **not** submitted gets **deactivated**. So a POST
+must include `Active<i>=1` for *every* module that should end up active, not just
+the ones being changed. Submitting only the one box you want to turn on silently
+turns everything else off.
+
+**`Delete<i>` / `Active<i>` are GLOBAL array keys, not company positions.** They
+index the array literal in `company/installed_extensions.php`, so the ids get
+sparse (`0,1,5,15,16,...`) and shift every time something is deleted. Never
+compute a control name from the company registry or from a previous response —
+re-parse the page and match the package name in the same row. (`Delete` with no
+number is a literal key `0`-less name, i.e. a genuinely different id.)
+
+**Fixing a stored `'-'` version goes through the UI, not the file.** A module
+already registered keeps its stale version, so re-activating it fails the gate
+forever. `local_extension()` (commit `6a00b5d`) now reads `_init/config` via
+FA's own `get_control_file()`, so the repair is: `Delete<i>` → `Local<pkg>` →
+activate. That is safe on a bind-mounted `fa_modules/` — `uninstall_package()`
+only touches `PKG_CACHE_PATH`, and local modules are not in the package cache,
+so the module directory and its `vendor/` survive.
+
+**Which registry file is authoritative.** `get_company_extensions(-1)` reads
+`/var/www/html/installed_extensions.php`; `update_extensions()` writes that
+global file and then copies it down to each `company/<id>/`, preserving only
+`active` **by array key**. So a stale global poisons every company registry on
+any install or activate. Verify the global file is actually the bind-mounted one
+by comparing sizes (`stat -c%s` on both sides) — on `ksfii_app-fa` the bind is
+NOT effective and FA writes a container-local copy, so the repo's
+`FA/ksfii_app/installed_extensions.php` is stale and a container recreate would
+lose the real global list. `ksf_fa` does bind correctly.
+
 **SQL prefix convention in module `sql/` files**: the install engine
 `db_import()` (`admin/db/maintenance_db.inc`) replaces ONLY the literal
 `0_` → `TB_PREF`. It does NOT touch `{TB_PREF}` or `@TB_PREF@` (those only
@@ -257,6 +338,56 @@ the file binds (legacy `compose.yaml` deleted, `start-fa.sh` rewritten). Rule:
 after any container create/modify, verify with
 `podman exec <c> grep -l config_db /proc/mounts` — don't trust `inspect`.
 
+**ROOTFUL single-file binds go dead on any inode-replacing write (root cause
+found 2026-10-01).** The *same* dead-inode failure hit `ksfii_app-fa` (8090),
+and this time the real cause is confirmed: a single-file bind resolves to one
+**inode**, not to the path. `sed -i`, `rsync` (without `--inplace`), `git
+checkout`, or any write-then-rename tool **replaces the inode**, so the
+container keeps reading the *unlinked original* forever while the host path
+holds brand-new content. Symptom set on 8090: registry stale (15 host entries
+vs the container's live 16, missing `ksf_Calendar`), `default.css` stale, and
+`config_db.php` stale — all three with `podman inspect` naming the correct
+source path, so the bind *looks* correct. Diagnosis is `stat -c%i` on both
+sides, never `inspect`. Rules:
+- Never edit a single-file bind target with `sed -i`. Use `cat src > dst` /
+  `tee` (truncate-in-place, keeps the inode) or `rsync --inplace`.
+- After ANY container create **or** after editing `config_db.php`,
+  `installed_extensions.php`, or `default.css`, re-run the inode check on all
+  six mounts. An inode-only change is invisible to a diff and to HTTP probes.
+- Recover by recreating the container *only after* fixing the host files, since
+  recreating makes the binds effective for the first time and will hand the
+  host's content to the app immediately.
+- `podman/ksf-compose.yaml` was **DELETED 2026-10-01**. It was a second,
+   competing container spec that nothing referenced; `podman-compose` 1.0.6
+   could not parse it, and its `ksfii-app` service disagreed with the real
+   container on image (`ksf-iiapp:latest` vs `ksf-fa:php7.4`), name
+   (`ksfii-app` vs `ksfii_app-fa`) and network (`ksf_network` vs `ksfii_app`).
+   Do not reintroduce it. The single source of truth for the FA container spec
+   is `ansible/roles/ksf.frontaccounting/tasks/container-run.yml`.
+- The provisioner also needs `ansible/ansible.cfg`. Without it Ansible resolves
+   roles from `/root/.ansible/roles` (a DIFFERENT repo, `ksfraser/ksf_ansible`)
+   and cannot find `ksf.mariadb`/`ksfii_app` at all, because the plays live in
+   `ansible/plays/` while the roles live in `ansible/roles/`. That is why these
+   containers were built by hand rather than by the playbook.
+- `ansible/roles/ksf.frontaccounting/tasks/verify_binds.yml` runs as `post_tasks`
+   on every FA play: it compares each bind's host inode against the container's,
+   and re-creates the container when they differ. This is what stops the
+   `ksfii_app` role from silently re-breaking the global registry bind by
+   templating it after the container is already running. Do not rely on task
+   ordering to keep binds alive — verify instead.
+
+**The two stacks have DIFFERENT DB credentials — never copy one
+`config_db.php` over the other (found 2026-10-01).** Rootless `ksf-fa` (8080)
+talks to container `ksf-mariadb` with `ksf_user` / `ksfuser2024!`; rootful
+`ksfii_app-fa` (8090) talks to `ksfii_app-mariadb` with `ksf_user` /
+`ksfuser2026!` (root pw `m1l1ce_db_root_2026!`, DB `ksf_fa`, 177 tables). The
+rootful host copy had been seeded from the rootless file, so it named the
+non-resolving host `ksf-mariadb` with the rootless password; that is why the
+bind was dangerous to fix — recreating alone would have handed FA a config it
+could not connect with. Change the DB host *and* password together, then
+verify from inside the container by `include`-ing the real
+`/var/www/html/config_db.php` and counting `information_schema` tables.
+
 **FA theme customization (decided 2026-09, cross-module)**
 
 Per-pod theme overlays **mirror the native FA tree** (`/var/www/html`), so the
@@ -276,7 +407,10 @@ Decisions: private modules mount **only** the `default.css` file; do not overlay
 `renderer.php`/`index.php`/`images/` (those stay read-only from the `2.4.3`
 mount). Target look: **Integration = RED**, **UAT = YELLOW**, default = original
 BLUE. The recipe applies `default.css.<fa_theme>` → `default.css` (never edits
-the variants). Container mounts were historically split across
-`podman/ksf-compose.yaml` vs the ansible role's `frontaccounting-container.yml`;
-the two recipes currently differ — reconcile before trusting either as source
-of truth.
+the variants). `fa_theme` defaults to `default` and **nothing sets it per
+environment** — both pods currently serve blue, so the Integration=RED /
+UAT=YELLOW target is still unimplemented; setting `fa_theme` per environment in
+the inventory is the remaining step. `tasks/scaffold.yml` now creates all three
+variants (`c7649b1`; it previously created only `.default` and `.red`, so
+`fa_theme: yellow` failed on a fresh pod). Container mounts are defined once, in
+the ansible role's `container-run.yml`.

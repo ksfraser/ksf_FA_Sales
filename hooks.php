@@ -66,7 +66,7 @@ class hooks_ksf_FA_Sales extends hooks
      * delegates the write to InvoiceCreationService. The by-reference $data is
      * REPLACED with the response, because a DTO cannot carry response offsets.
      *
-     * @param array|\Ksfraser\FA\Sales\Entity\InvoiceDTO $data Request DTO or array
+     * @param array|\ksfraser\FrontAccounting\Sales\Entity\InvoiceDTO $data Request DTO or array
      * @param array|null $opts
      * @return array Response: success, invoice_no, trans_type, debtor_no, line_count
      */
@@ -79,10 +79,10 @@ class hooks_ksf_FA_Sales extends hooks
         }
         require_once $autoload;
 
-        if ($data instanceof \Ksfraser\FA\Sales\Entity\InvoiceDTO) {
+        if ($data instanceof \ksfraser\FrontAccounting\Sales\Entity\InvoiceDTO) {
             $dto = $data;
         } elseif (is_array($data)) {
-            $dto = \Ksfraser\FA\Sales\Entity\InvoiceDTO::fromArray($data);
+            $dto = \ksfraser\FrontAccounting\Sales\Entity\InvoiceDTO::fromArray($data);
         } else {
             $data = [
                 'success' => false,
@@ -92,7 +92,7 @@ class hooks_ksf_FA_Sales extends hooks
         }
 
         try {
-            $service = new \Ksfraser\FA\Sales\Service\InvoiceCreationService();
+            $service = new \ksfraser\FrontAccounting\Sales\Service\InvoiceCreationService();
             $response = $service->createInvoice($dto);
         } catch (\Exception $e) {
             $response = ['success' => false, 'error' => $e->getMessage()];
