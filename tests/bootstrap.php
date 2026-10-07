@@ -145,3 +145,17 @@ if (!defined('FA_SALES_TEST_STUBS_LOADED')) {
         }
     }
 }
+
+// TB_PREF and db_escape are pure and side-effect free, so they are safe to
+// define here. db_query is deliberately NOT defined: tests assert the 'no FA
+// environment' branch (findCandidates must return array() when db_query is
+// absent), and PHP cannot undefine a function, so a global stub would disarm
+// them for every later test.
+defined('TB_PREF') || define('TB_PREF', '0_');
+
+if (!function_exists('db_escape')) {
+    function db_escape($value)
+    {
+        return "'" . addslashes((string)$value) . "'";
+    }
+}

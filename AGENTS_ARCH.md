@@ -22,6 +22,22 @@ Read this before creating or refactoring any ksf module.
   libraries may differ — each repo records its own floor in `_APPENDIX`.
 - `declare(strict_types=1);` at the top of every PHP file.
 
+**OPEN TENSION (2026-10, needs a ruling).** The floor above says "no typed
+properties", but two modules use them and declare `>=7.4`:
+`ksf_FA_Customer` (`src/Customer/Models/CustomerDTO.php`) and `ksf_FA_Payment`
+(`src/Payment/Models/PaymentDTO.php`). Their composer constraints were corrected
+from a false `>=7.3` to an honest `>=7.4`, and both pin
+`config.platform.php = 7.4.33`. So the *code* is 7.4 while the *documented floor*
+is 7.3. Either the two modules are rewritten to drop typed properties, or the
+floor is raised to 7.4 to match the container runtime. Not yet decided — do not
+"fix" this unilaterally in either direction.
+
+If a module keeps typed properties, note the second trap: a typed property
+without a default is **uninitialised**, and reading it throws
+`Typed property ... must not be accessed before initialization`. Both DTOs above
+had this bug, which made `toArray()` on a bare `new DTO()` a fatal. Every typed
+property must be defaulted.
+
 ## 2. Core design principles
 
 - **SOLID, DRY, SRP, DI, TDD** — single responsibility, dependencies injected
@@ -33,6 +49,61 @@ Read this before creating or refactoring any ksf module.
 - **Business logic + platform adapter split** — framework-agnostic business
   logic lives in a `*_Core` package (`ksfraser\<Package>\`); the FA adapter
   module (`ksf_FA_*` → `ksfraser\FrontAccounting\<Module>\`) is a thin wrapper.
+
+### 2.1 Namespace convention (canonical, no variations)
+
+An FA module named `ksf_FA_<Module>` uses exactly:
+
+```
+ksfraser\FrontAccounting\<Module>\
+```
+
+Lowercase vendor segment, then `FrontAccounting`, then the module name. The
+PSR-4 mapping and the on-disk layout must match, e.g.
+
+```json
+"psr-4": { "ksfraser\FrontAccounting\<Module>\": "src/FrontAccounting/<Module>/" }
+```
+
+**These are NOT acceptable** — they were all found in the wild and had to be
+migrated (2026-10): `Ksfraser\FA\<Module>\`, `Ksfraser\FA<Module>\`,
+`ksfraser\FA\<Module>\`, `ksfraser\FA<Module>\`. They read as "FA" plus an
+abbreviation and are not the documented vendor path.
+
+Migrated in the 2026-10 pass, all with tests green and a
+`NamespaceConventionTest` guard added to `ksf_FA_CRM`:
+
+| Module | Was | Now |
+|---|---|---|
+| `ksf_FA_Customer` | `Ksfraser\FACustomer\` | `ksfraser\FrontAccounting\Customer\` |
+| `ksf_FA_Payment` | `Ksfraser\FAPayment\` | `ksfraser\FrontAccounting\Payment\` |
+| `ksf_FA_Sales` | `Ksfraser\FA\Sales\` | `ksfraser\FrontAccounting\Sales\` |
+| `ksf_FA_CRM` | `Ksfraser\FA\CRM\` | `ksfraser\FrontAccounting\CRM\` |
+
+Do not add a second autoloader. Put the PSR-4 mapping in the module's own
+`composer.json` and let `tests/bootstrap.php` reuse Composer's loader, rather
+than hand-rolling a prefix matcher (those drift from composer.json and then
+resolve nothing).
+
+### 2.2 One module owns each FA-native capability
+
+Each FA-native aggregate gets ONE focused module that wraps FA's own routines:
+`ksf_FA_Customer` (debtor + branch + contact), `ksf_FA_Payment` (customer
+payment + allocation), `ksf_FA_Sales` (sales invoice). They expose the full
+CRUD/search responder set (`CREATE_*`, `GET_*`, `SEARCH_*`, `UPDATE_*`), not
+just the one capability they were first written for.
+
+A capability must have exactly one owner. Two modules answering the same hook
+name makes `hook_invoke_first` nondeterministic and defeats targeted
+`hook_invoke`. `CREATE_CUSTOMER` was briefly duplicated into `ksf_FA_CRM` before
+`ksf_FA_Customer` was found; the CRM copy was removed.
+
+**Callers reach owners through hooks only** —
+`hook_invoke('<Module>', '<RESPONDER>', $data)`. Never instantiate the owner's
+classes directly: that bypasses the hook boundary, hard-couples the caller to
+whichever module happens to own the capability, and (in ISU's case) could not
+have worked at all because ISU's vendor tree has no autoloader for those
+modules.
 
 ## 3. Standard module layout
 
@@ -502,6 +573,43 @@ after human review, may create the FA debtor/branch/contact (via CRM's
 Square's `refreshAllCustomers()` now stages every customer through the same
 `stageCustomerForReview()` path as incremental sync and reports per-customer
 staging outcomes; it never touches CRM.
+
+### 11.4 Verify existence remotely before declaring anything dead (2026-10)
+
+**A grep over `~/Documents` returning nothing is NOT evidence that a class does
+not exist.** Three repos existed on GitHub with full implementations while having
+no local checkout at all:
+
+- `ksfraser/ksf_FA_Customer` — `CREATE_CUSTOMER` / `GET_CUSTOMER` /
+  `SEARCH_CUSTOMER` / `UPDATE_CUSTOMER`
+- `ksfraser/ksf_FA_Payment` — `CREATE_PAYMENT` / `GET_PAYMENT` /
+  `SEARCH_PAYMENT` / `UPDATE_PAYMENT`
+- `ksfraser/ksf_FA_CRM` already existed too (the adapter, not the capability)
+
+Both were pushed on 2026-05-27 and simply never cloned into `~/Documents`.
+
+**What this cost.** Because ISU's `createPaymentDirect()` referenced
+`\Ksfraser\FAPayment\Services\PaymentService` and a local grep found nothing,
+that fallback was deleted as "referencing classes that do not exist in any tree".
+The claim was written into a commit message and was simply false. Separately, a
+duplicate `ksf_FA_Payment` and a duplicate `CREATE_CUSTOMER` in `ksf_FA_CRM`
+were written from scratch before the originals were found, and only the second
+duplicate was caught before it shipped.
+
+Rules:
+
+1. Before concluding a class/module/responder is dead or absent:
+   `gh repo view ksfraser/<name>`, and `git ls-remote` to confirm it has commits.
+2. Before writing a new module, check whether the repo already exists.
+3. Before `git push` to a repo you did not create, **fetch and read what is
+   already there.** A `git init` + force-push would have destroyed two months of
+   work in `ksf_FA_Payment`.
+4. If a statement about the codebase has been committed, it needs to be true.
+   When a premise turns out to be wrong, add a correcting commit rather than
+   leaving it — and do not silently change the conclusion's justification.
+
+Related: several modules' `_init/config`, `_APPENDIX` and docs existed only in
+the remote copy. Local absence and remote absence are different questions.
 
 ### 11.3 STAGE_ENTITY live contract (verified E2E 2026-10 on ksfii_app-fa)
 

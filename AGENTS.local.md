@@ -67,6 +67,49 @@ Accepted key spellings per line: `stock_id|stockid|stock|part_id`,
 `quantity|qty`, `price|unit_price|rate`, `description|item_description`,
 `discount`. Lines may be under `lines`, `items` or `line_items`.
 
+## SEARCH_SALES_INVOICE — provider contract
+
+Runs under `hook_invoke_all` alongside any other provider, so: tag every row with
+`_module` and `_entity` plus the native `invoice_no`, do NOT write into `$data`
+(passed by reference to every other provider in turn), and return `null` to
+decline rather than to mean "no matches".
+
+**It returns each candidate's LINE ITEMS, not just the header.** That is the
+whole reason it exists: the caller cannot confirm an invoice from its total,
+because FA and the source system legitimately compute different totals for the
+same order. ISU's `LineItemComparer` compares the lines instead.
+
+### FA 2.4.3 storage (verified — there is no `sales_invoice_details` table)
+
+A sales invoice header is a row in **`debtor_trans`** with
+`type = ST_SALESINVOICE` (10). Its lines are rows in **`debtor_trans_details`**.
+The line columns mirror FA's own `line_details` class in
+`sales/includes/cart_class.inc`: `stock_id`, `quantity`, `price`,
+`discount_percent`, `description`. The service maps those onto the
+`LineItemComparer` shape.
+
+Lines are loaded for all shortlisted invoices in ONE query — a per-invoice query
+would be N+1, defeating the point of shortlisting first.
+
+### Criteria and their traps
+
+`debtor_no`, `date_from`/`date_to` (inclusive), `reference`, `amount` +
+`amount_tolerance_percent`, `limit`.
+
+- The amount filter is a **shortlist** tolerance, wide by default (10%), because
+  the caller confirms by line comparison. A tight total filter would discard the
+  very invoice that needs comparing.
+- **A zero amount is skipped, not turned into a window.** It carries no matching
+  signal, and the resulting range (`-0.00 .. 0.00`) could never match a real
+  invoice, so it would silently drop every candidate.
+- **No filter at all means no statement.** Returning every sales invoice in the
+  ledger is worse than returning none.
+- Bounds are rendered with `sprintf('%.6F')`; PHP renders small floats in
+  scientific notation (`1.0E-9`), which is fragile in SQL.
+- Do not add a global `db_query()` stub to `tests/bootstrap.php` — PHP cannot
+  undefine a function, so it disarms the "no FA environment" branch.
+  `TB_PREF` and `db_escape` are pure and safe to define.
+
 ## Linking an invoice to its sales order
 
 If `source_order_no` (aliases `order_no`, `src_doc`) is supplied, the service

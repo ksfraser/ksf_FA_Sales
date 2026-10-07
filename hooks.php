@@ -55,7 +55,7 @@ class hooks_ksf_FA_Sales extends hooks
         return array(
             'sales.hooks_version' => '1.0',
             'sales.module_version' => '1.0.0',
-            'sales.features' => array('create_sales_invoice'),
+            'sales.features' => array('create_sales_invoice', 'search_sales_invoice'),
         );
     }
 
@@ -100,5 +100,76 @@ class hooks_ksf_FA_Sales extends hooks
 
         $data = $response;
         return $response;
+    }
+
+    /**
+     * Find candidate FA sales invoices for a staged order.
+     *
+     * One of possibly SEVERAL providers under hook_invoke_all, so: tag every
+     * row with _module and _entity plus the native invoice_no, do NOT write into
+     * $data (it is passed by reference to every other provider in turn), and
+     * return null to decline rather than to mean "no matches".
+     *
+     * Returns each candidate's LINE ITEMS as well as its header. That is the
+     * point: the caller cannot confirm an invoice from its total, because FA and
+     * the source system legitimately compute different totals for the same
+     * order. It compares the lines instead.
+     *
+     * @param array\Ksfraser\FrontAccounting\Sales\Entity\InvoiceDTO $data Search criteria
+     * @param array|null $opts
+     * @return array|null List of candidates, or null to decline
+     */
+    function SEARCH_SALES_INVOICE(&$data, $opts = null)
+    {
+        $autoload = __DIR__ . '/vendor/autoload.php';
+        if (!file_exists($autoload)) {
+            return array();
+        }
+        require_once $autoload;
+
+        $criteria = $this->searchCriteria($data);
+        if ($criteria === array()) {
+            // Decline, so another provider gets a turn.
+            return null;
+        }
+
+        try {
+            $service = new \ksfraser\FrontAccounting\Sales\Service\InvoiceSearchService();
+            $candidates = $service->findCandidates($criteria);
+        } catch (\Exception $e) {
+            error_log('ksf_FA_Sales: SEARCH_SALES_INVOICE failed: ' . $e->getMessage());
+            return array();
+        }
+
+        foreach ($candidates as &$candidate) {
+            $candidate['_module'] = $this->module_name;
+            $candidate['_entity'] = 'sales_invoice';
+        }
+        unset($candidate);
+
+        return $candidates;
+    }
+
+    /**
+     * Extract supported search criteria from the request payload.
+     *
+     * @param array $data
+     * @return array Empty when there is nothing to search for
+     */
+    private function searchCriteria(array $data)
+    {
+        $allowed = array(
+            'debtor_no', 'date_from', 'date_to', 'reference',
+            'amount', 'amount_tolerance_percent', 'limit',
+        );
+
+        $criteria = array();
+        foreach ($allowed as $key) {
+            if (isset($data[$key]) && $data[$key] !== '') {
+                $criteria[$key] = $data[$key];
+            }
+        }
+
+        return $criteria;
     }
 }
