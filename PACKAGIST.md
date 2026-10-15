@@ -105,12 +105,12 @@ Packagist URL pattern: `https://packagist.org/packages/<package>`.
 | `ksfraser/ksf_fa_wallet` | frontaccounting-module | `ksf_FA_Wallet` | Digital Wallet System for FrontAccounting (extracted from TeraWallet/WooCommerce) |
 | `ksfraser/ksf-fa-warrantymanagement` | fa-module | `ksf_FA_WarrantyManagement` | FA WarrantyManagement Module for FrontAccounting |
 | `ksfraser/export-woocommerce` | project | `ksf_FA_Woocommerce` | FrontAccounting module for exporting data to WooCommerce via REST API |
-| `ksfraser/ksf-fa-business-valuation` | library | `ksf_FA_business_valuation` | FrontAccounting UI/hooks for Business Valuation (Ksfraser\FA\BusinessValuation). |
-| `ksfraser/ksf-fa-estate` | library | `ksf_FA_estate` | FrontAccounting UI/hooks for estate planning (Ksfraser\Estate business logic). |
-| `ksfraser/ksf-fa-insurance` | library | `ksf_FA_insurance` | FrontAccounting UI/hooks for insurance planning (Ksfraser\FA\Insurance). |
-| `ksfraser/ksf-fa-portfolio` | library | `ksf_FA_portfolio` | FrontAccounting UI/hooks for Portfolio Analytics (Ksfraser\FA\Portfolio). |
-| `ksfraser/ksf-fa-recommendation` | library | `ksf_FA_recommendation` | FrontAccounting UI/hooks for Recommendation (Ksfraser\FA\Recommendation). |
-| `ksfraser/ksf-fa-retirement` | library | `ksf_FA_retirement` | FrontAccounting UI/hooks for Retirement Planning (Ksfraser\FA\Retirement). |
+| `ksfraser/ksf-fa-business-valuation` | library | `ksf_FA_business_valuation` | FrontAccounting UI/hooks for Business Valuation (ksfraser\FA\BusinessValuation). |
+| `ksfraser/ksf-fa-estate` | library | `ksf_FA_estate` | FrontAccounting UI/hooks for estate planning (ksfraser\Estate business logic). |
+| `ksfraser/ksf-fa-insurance` | library | `ksf_FA_insurance` | FrontAccounting UI/hooks for insurance planning (ksfraser\FA\Insurance). |
+| `ksfraser/ksf-fa-portfolio` | library | `ksf_FA_portfolio` | FrontAccounting UI/hooks for Portfolio Analytics (ksfraser\FA\Portfolio). |
+| `ksfraser/ksf-fa-recommendation` | library | `ksf_FA_recommendation` | FrontAccounting UI/hooks for Recommendation (ksfraser\FA\Recommendation). |
+| `ksfraser/ksf-fa-retirement` | library | `ksf_FA_retirement` | FrontAccounting UI/hooks for Retirement Planning (ksfraser\FA\Retirement). |
 | `ksfraser/ksf-forms` | library | `ksf_Forms` | Form builder library with CF7 integration |
 | `ksfraser/ksf_gpg` | library | `ksf_GPG` | GPG business logic library providing key management, signing, encryption, and keyserver operations |
 | `ksfraser/ksf-gantt` | library | `ksf_Gantt` | Gantt Chart module for KSF |
@@ -155,26 +155,26 @@ Packagist URL pattern: `https://packagist.org/packages/<package>`.
 | `ksfraser/ksf-travel-expense` | project | `ksf_TravelExpense` | Travel Expense Module |
 | `ksfraser/ksf-wp-estateplanning` | library | `ksf_WP_EstatePlanning` | WordPress UI/hooks for estate planning |
 | `ksfraser/ksf_wp_orgchart` | library | `ksf_WP_OrgChart` | WordPress OrgChart Adapter - Interactive organizational hierarchy visualization |
-| `ksfraser/ksf-wp-business-valuation` | wordpress-plugin | `ksf_WP_business_valuation` | WordPress UI/hooks for Business Valuation (Ksfraser\WP\BusinessValuation). |
-| `ksfraser/ksf-wp-estate` | wordpress-plugin | `ksf_WP_estate` | WordPress UI/hooks for estate planning (Ksfraser\Estate business logic). |
-| `ksfraser/ksf-wp-insurance` | wordpress-plugin | `ksf_WP_insurance` | WordPress UI/hooks for insurance planning (Ksfraser\WP\Insurance). |
-| `ksfraser/ksf-wp-portfolio` | wordpress-plugin | `ksf_WP_portfolio` | WordPress UI/hooks for Portfolio Analytics (Ksfraser\WP\Portfolio). |
-| `ksfraser/ksf-wp-recommendation` | wordpress-plugin | `ksf_WP_recommendation` | WordPress UI/hooks for Recommendation (Ksfraser\WP\Recommendation). |
-| `ksfraser/ksf-wp-retirement` | wordpress-plugin | `ksf_WP_retirement` | WordPress UI/hooks for Retirement Planning (Ksfraser\WP\Retirement). |
+| `ksfraser/ksf-wp-business-valuation` | wordpress-plugin | `ksf_WP_business_valuation` | WordPress UI/hooks for Business Valuation (ksfraser\WP\BusinessValuation). |
+| `ksfraser/ksf-wp-estate` | wordpress-plugin | `ksf_WP_estate` | WordPress UI/hooks for estate planning (ksfraser\Estate business logic). |
+| `ksfraser/ksf-wp-insurance` | wordpress-plugin | `ksf_WP_insurance` | WordPress UI/hooks for insurance planning (ksfraser\WP\Insurance). |
+| `ksfraser/ksf-wp-portfolio` | wordpress-plugin | `ksf_WP_portfolio` | WordPress UI/hooks for Portfolio Analytics (ksfraser\WP\Portfolio). |
+| `ksfraser/ksf-wp-recommendation` | wordpress-plugin | `ksf_WP_recommendation` | WordPress UI/hooks for Recommendation (ksfraser\WP\Recommendation). |
+| `ksfraser/ksf-wp-retirement` | wordpress-plugin | `ksf_WP_retirement` | WordPress UI/hooks for Retirement Planning (ksfraser\WP\Retirement). |
 | `ksfraser/ksf-wallet-core` | library | `ksf_Wallet_Core` | Wallet business logic (framework-agnostic, extracted from TeraWallet/WooCommerce) |
 | `ksfraser/ksf-warrantymanagement` | php-package | `ksf_WarrantyManagement` | Warranty Management - SKU definitions, liability tracking, RMA, claims |
 | `ksfraser/ksf-warrantymanagement-ui` | library | `ksf_WarrantyManagement_UI` | Warranty Management UI for KSF |
 | `ksfraser/ksf-workflow` | php-package | `ksf_Workflow` | Workflow Engine - triggers, conditions, actions |
 | `ksfraser/ksf_workflow_ui` | project | `ksf_Workflow_UI` | Standalone Workflow_UI UI - includes UI, DB service, controller |
 | `ksfraser/fa-bank-import` | library | `ksf_bank_import` | A FrontAccounting module for bank import functionality with paired transfer processing. |
-| `ksfraser/ksf-business-valuation` | library | `ksf_business_valuation` | Business Valuation calculation engines (Ksfraser\BusinessValuation). |
+| `ksfraser/ksf-business-valuation` | library | `ksf_business_valuation` | Business Valuation calculation engines (ksfraser\BusinessValuation). |
 | `ksfraser/ksf-estate` | library | `ksf_estate` | Estate planning calculation engines (probate fees, estate tax, beneficiary analysis, wealth transfer) — common business logic shared across FrontAccounting, SuiteCRM, and WordPress. |
-| `ksfraser/ksf_insurance` | library | `ksf_insurance` | Insurance needs, valuation, and policy comparison calculation engines (Ksfraser\Insurance). |
+| `ksfraser/ksf_insurance` | library | `ksf_insurance` | Insurance needs, valuation, and policy comparison calculation engines (ksfraser\Insurance). |
 | `ksfraser/ksf_modules_common` | library | `ksf_modules_common` | Shared calculation framework for KSF calculation engines: engine contract, calculation context/result, parameter definitions, and validation rules. Common business logic shared across FrontAccounting, SuiteCRM, and WordPress modules. |
 | `ksfraser/ksf_payment_destinations` | library | `ksf_payment_destinations` | Direct Invoice Payment Destinations for FrontAccounting |
-| `ksfraser/ksf-portfolio` | library | `ksf_portfolio` | Portfolio Analytics calculation engines (Ksfraser\Portfolio). |
-| `ksfraser/ksf-recommendation` | library | `ksf_recommendation` | Recommendation calculation engines (Ksfraser\Recommendation). |
-| `ksfraser/ksf-retirement` | library | `ksf_retirement` | Retirement Planning calculation engines (Ksfraser\Retirement). |
+| `ksfraser/ksf-portfolio` | library | `ksf_portfolio` | Portfolio Analytics calculation engines (ksfraser\Portfolio). |
+| `ksfraser/ksf-recommendation` | library | `ksf_recommendation` | Recommendation calculation engines (ksfraser\Recommendation). |
+| `ksfraser/ksf-retirement` | library | `ksf_retirement` | Retirement Planning calculation engines (ksfraser\Retirement). |
 | `ksfraser/staging-dto` | library | `ksf_staging_dto` | Data Transfer Objects for ISU staging integration |
 | `ksfraser/portfolio-math` | library | `portfolio-math` | Portfolio performance calculations: TWR, IRR, drawdown, volatility, asset allocation. Shared library for stockmarket, FrontAccounting, ksfii_app. |
 | `ksf/ksf-dynamic-pricing-core` | library | `ksf_DynamicPricing_Core` | Framework-agnostic dynamic pricing engine extracted from WooCommerce DynamicPricing (*note: `ksf/` vendor prefix, not `ksfraser/`*) |

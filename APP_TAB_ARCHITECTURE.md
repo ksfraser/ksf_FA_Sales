@@ -34,7 +34,7 @@ CRM / HRM / ProjectManagement are the intended **app hosts** (roadmap §7).
 |--------------------------|------------------------------------------|--------------------------------------------------|----------------------------------------------------|
 | Shared plugin layer      | `ksf_FA_Common` (`ksfraser/ksf-fa-common`) | `ksfraser\FrontAccounting\Common\Plugin`      | `PluginRegistry`, `AbstractPlugin`, `PluginInterface` (generic discover/register/activate) |
 | Tab base classes         | `FA_ProductAttributes_Core` (`ksfraser/fa-product-attributes-core`) | `FrontAccounting\ProductAttributes\Plugin` | `AbstractTab`, `ProductAttributeTabInterface`, `TabRegistry` — the tab contract |
-| Generic traits           | `Traits` (`ksfraser/traits`)                | `Ksfraser\Traits`                                | `InlineTabRendererTrait`, `InlinePostActionsTrait` — render + POST flow |
+| Generic traits           | `Traits` (`ksfraser/traits`)                | `ksfraser\Traits`                                | `InlineTabRendererTrait`, `InlinePostActionsTrait` — render + POST flow |
 | Exemplar host adapter    | `FA_ProductAttributes` (`ksfraser/fa-product-attributes`) | `FrontAccounting\ProductAttributes\Hooks`  | wires the tab plugins onto `items.php` via `item_display_tab_*` |
 | App hosts (roadmap)      | `ksf_FA_CRM`, `ksf_FA_HRM`, `ksf_FA_ProjectManagement` | `FrontAccounting\...\Application` (`extends application`) | `install_tabs()` + `add_application()`; future `display_tab_*` hosts |
 
@@ -57,9 +57,9 @@ CRM / HRM / ProjectManagement are the intended **app hosts** (roadmap §7).
 | Prefix                          | Autoload source                    | Maps to                       |
 |---------------------------------|------------------------------------|-------------------------------|
 | `ksfraser\FrontAccounting\Common\`            | ksf_FA_Common composer psr-4  | `src/`                        |
-| `Ksfraser\Frontaccounting\HTML\`              | ksf_FA_Common composer psr-4  | `src/HTML/`                   |
+| `ksfraser\Frontaccounting\HTML\`              | ksf_FA_Common composer psr-4  | `src/HTML/`                   |
 | `FrontAccounting\ProductAttributes\`          | product-attributes-core psr-4 | `src/FrontAccounting/ProductAttributes/` |
-| `Ksfraser\Traits\`                            | traits psr-4                   | `src/Ksfraser/Traits/`        |
+| `ksfraser\Traits\`                            | traits psr-4                   | `src/ksfraser/Traits/`        |
 | `KsfCommon\*` (legacy)             | **NOT autoloaded**            | aliased by `ksf_FA_Common/src/compat.php` |
 
 **Gotcha — `KsfCommon\Plugin\*` is a legacy alias, not a real autoloaded
@@ -93,7 +93,7 @@ New code should import `ksfraser\FrontAccounting\Common\Plugin\*` directly.
 
 ## 5. Traits — where the shared logic lives
 
-### `Ksfraser\Traits` (package `ksfraser/traits`)
+### `ksfraser\Traits` (package `ksfraser/traits`)
 
 - **`InlineTabRendererTrait`** (since 1.4.0) — shared render flow. The using class
   MUST declare `$tabClassName` (FQCN of the UI renderer); the trait manages `$tab`.
@@ -197,7 +197,7 @@ enforced by the regression test `testRenderDoesNotContainFormTag`.
 
 **Working approach (option A, adopted):** stay inside the host form and drive
 tab action buttons through FA's `ajaxsubmit`/`JsHttpRequest` path — the reusable
-SRP renderers `Ksfraser\Frontaccounting\HTML\MasterSummaryTable`,
+SRP renderers `ksfraser\Frontaccounting\HTML\MasterSummaryTable`,
 `FormFooter`, `TabContext` already emit `ajaxsubmit` submit buttons
 + `formnovalidate` + hidden `record_id` / `_tabs_sel`. No nested form, no broken
 native submit. `handlePostActions()` reads `$_POST['_tabs_sel']` (the host form
@@ -241,6 +241,9 @@ separating orchestration from presentation so modules stop hand-rolling routers.
 | `AbstractTabController`  | one tab = summary table + entry form| `run()` → `handlePost()` + `renderSummaryTable()` + `renderEntryForm()` |
 | `TabRegistration`        | tab DTO                             | `(key, label, security, controllerClass, priority, order, pageFile, faType, options)` |
 | `TabRegistrationTrait`   | module-side registration            | `registerTabWithApp()`, `respondToAppRegister(&$data)` |
+| `AbstractFrontController` | one app = the whole request preamble | `getSecurityArea()`, `resolveTabKey()`, `resolvePagePosition()`, `resolveAction()`, `normaliseRequest()`, `run()` **(final)**, `enforceSecurity()` **(final protected)** — since 1.1.0, published v1.0.13 |
+| `FrontControllerRoutingException` | no tab could be resolved at all | final, extends `RuntimeException` |
+| `FrontControllerSecurityException` | no area resolvable, or no way to check access | final, extends `RuntimeException` |
 
 **Register-with-me hook.** `AbstractAppShell::boot()` fires
 `hook_invoke_all('<appId>_register_tabs', $data)`. Any module responds by merging its
@@ -275,6 +278,81 @@ subclasses one tab at a time (Customer Types first; e.g. `territories.php` still
 
 **Pilot:** HRM Departments (`HrmAppShell` + `DepartmentsTabController`); full CRUD
 verified live. Rollout: CRM (Customer Types first), then PM.
+
+## 11.1 `AbstractFrontController` — the host page as a base class (implemented 2026-10-13)
+
+`AbstractAppShell` made the *tab registry* shared but left every module
+hand-rolling the same request preamble around it. `AbstractFrontController`
+(package `ksfraser/ksf-fa-common`, **@since 1.1.0**, first published **v1.0.13**,
+`loadUiIncludes()` fixed in **v1.0.14**) extracts that preamble.
+
+| | |
+|---|---|
+| Class | `ksfraser\FrontAccounting\Common\App\AbstractFrontController` (`src/App/AbstractFrontController.php`) |
+| Adoptors | `ksf_FA_HRM` (`HrmFrontController`, commit `18fcba5`) and `ksf_FA_CRM` (`CrmFrontController`, commit `a81db58`) |
+| **Not adopted** | `ksf_FA_ProjectManagement` — `PmAppShell` exists with six controller-backed tabs, but its `index.php` is still a hand-rolled 59-line preamble and its vendored `ksf-fa-common` has no `AbstractFrontController.php` |
+
+**Canonical URL shape.** `tab` is the tab selector, `page` is the pager position
+and is **never** consulted as a selector, `action` is the mutation verb:
+
+```
+index.php?tab=<tab>                 read
+index.php?tab=<tab>&page=3          tab + pager position
+index.php?tab=<tab>&action=save     mutation
+```
+
+The pager parameter is deliberately left untouched in `$_GET` so
+`MasterSummaryTable::pagerUrl()` emits `?page=3&tab=leave`.
+
+**Security is fail-closed by construction** — five guarantees, each test-pinned:
+
+1. the constructor rejects an empty/whitespace `$fallbackSecurity`
+   (`FrontControllerSecurityException`), so there is no "no area, no check" state;
+2. `run()` is **`final`** — a subclass cannot reorder or omit the dispatch sequence;
+3. `enforceSecurity()` is **`final protected`** — a subclass cannot weaken it;
+4. enforcement runs **once, before the action path is chosen**, so `?action=save`
+   cannot route around the check the read path would have made;
+5. if `check_page_security()` is absent the request is **refused**, not rendered.
+
+`enforceSecurity()` runs **after** `boot()`, so a tab contributed through
+`<appId>_register_tabs` is checked against **its own** area rather than the
+constructor fallback. This closes the gap that §9's "fire the register hook before
+the area is resolved" rule used to leave as a manual step.
+
+**Two-phase bootstrap is structural, not stylistic.** FA's `session.inc` (and
+`includes/ui.inc`) read `$page_security` / `$path_to_root` as **globals in their
+including scope**; from inside a method they are method locals and every nested
+include resolves against the filesystem root and fails *silently*. So the host
+page does phase A at global scope and phase B in `run()`:
+
+```php
+$fc = new CrmFrontController(new CrmAppShell(), 'SA_CRM_DASHBOARD', $path_to_root);
+$page_security = $fc->getSecurityArea();          // phase A, global scope
+include_once($path_to_root . "/includes/session.inc");
+add_access_extensions();
+$fc->run();                                        // phase B
+```
+
+**The four options that decide whether an adoption is behaviour-preserving:**
+
+| Option | Default | Why a module usually changes it |
+|---|---|---|
+| `tab_param` | `'tab'` | The app's published selector. HRM keeps `tab`; CRM and PM pin `view` because their shells and link emitters mint `?view=`. |
+| `alias_param` | `'view'` | The house selector is usually the *alias* once `tab_param` is pinned to something else. |
+| `normalise_get` | `true` | **Set `false` when `AbstractTabController::preserveParams()` does not return `[$tabParam]`.** `MasterSummaryTable` copies those `$_GET` keys verbatim, so normalising silently strips the tab off every pager link. |
+| `load_ui_includes` | `true` | `includes/ui.inc` needs `$path_to_root` in its including scope; hosts that include it at global scope switch this off. v1.0.14 seeds the variable inside `loadUiIncludes()`, which makes the default honest again. |
+
+**Check `dispatchAction()` before adopting the base unmodified.** The base routes a
+non-empty `action` verb to `$controller->runAction()` and renders "this action is
+not available" when the controller has none. CRM's tab controllers never
+implemented `runAction()` (they own verbs inside `run() → handlePost()`), so the
+unmodified base would have made **every POST save a silent no-op** — CRM
+overrode `dispatchAction()` to dispatch the tab. Overriding is safe because
+`enforceSecurity()` has already run.
+
+**Not provided by this class, by design:** CSRF tokens, record-level
+authorisation, and any notion of which verbs require POST. Whether a verb is a
+mutation is the tab controller's contract.
 
 **Deployment gotcha (footer regression, 2026-09).** Modules that vendor `ksf-fa-common`
 as a **symlink** to `../../../ksf_FA_Common/` (e.g. `ksf_FA_Calendar`, `ksf_FA_Logging`)

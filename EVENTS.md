@@ -193,6 +193,37 @@ but no module calls `hook_invoke_all('grn_received')` or
 
 ---
 
+### `ksf_event_closed` — Planned (BR-007, design approved)
+
+Broadcast fired by Calendar AFTER an attendance/work event transitions to
+`closed` (committed). Payload = the canonical EventClosedDto (event_id, title,
+event_type, location, started_at, closed_at, user_id, project_id?, task_id?,
+sales_order_id?, linked_entities[], attendee_emails[], closed_by). Re-close is a
+no-op. Contract: FR-CAL-007-001/002, ARCH-007-event-close-workflow-design.md.
+
+**Emitter:** ksf_FA_Calendar (to implement per FR-CAL-007-002)
+**Listeners (to implement):**
+- `ksf_FA_Timesheets` — bulk member time (FR-TIME-007-002/003)
+- `ksf_FA_TravelExpense` — new-or-existing expense (FR-EXPENSE-007-001)
+- `ksf_FA_ProjectManagement` — task time-window close (FR-PM-007-002)
+- `ksf_FA_Warehouse` — pick-ready re-broadcast on sales-order hybrids (FR-WH-007-001)
+
+---
+
+### `ksf_event_classify_attendees` — Planned (BR-007, design approved)
+
+Read-only request on the close flow: any subscriber asks it to partition the
+DTO's `attendee_emails[]` into `member` vs `external`. Responders (PM, HRM,
+CRM, Teams/Warehouse) append only emails they resolve in their OWN identity
+space; caller aggregates (member wins; unclassified external; empty = all
+member). Contract: FR-CAL-007-003, ARCH-007-event-close-workflow-design.md.
+
+**Callers (to implement):** ksf_FA_Timesheets subscriber (FR-TIME-007-002/003)
+**Responders (to implement):** ksf_FA_ProjectManagement (FR-PM-007-001),
+`ksf_FA_HRM` (FR-HRM-007-001), `ksf_FA_CRM` (FR-CRM-007-001)
+
+---
+
 ## 4. Import Staging Pipeline
 
 Hook-first request/response pattern for the ISP framework.
@@ -215,6 +246,32 @@ Hook-first request/response pattern for the ISP framework.
 | `STAGE_PAYMENT` | request | ISP `hooks.php:457` |
 | `STAGE_ENTITY` | request | ISP_UI → Square/Woocommerce `IsuStagingGateway.php` |
 | `STAGING_EXISTS` | request | ISP_UI → Square `IsuStagingGateway.php:46` |
+
+### 4.1 Payload & by-reference contract (binding, 2026-10)
+
+`STAGE_ENTITY` and `STAGING_EXISTS` are **DTO-based**: the caller passes a
+`Ksfraser\StagingDto\StagingEntity` / `StagingExistsQuery` **by reference**, and
+the responder **replaces `$data` with a response array**.
+
+This is not optional — FA passes `$data` by reference, and `StagingEntity`
+implements `JsonSerializable`, **not** `ArrayAccess`. A responder that receives
+the DTO and writes `$data['result'] = ...` (or `$data['error'] = ...` on the
+error paths) fatals with `Cannot use object of type ... as array`. This broke
+`STAGE_ENTITY` and `STAGING_EXISTS` on **every** path, so Square order staging
+could never work; both were fixed in ISP `hooks.php` by replacing `$data`
+wholesale instead of writing offsets.
+
+| | Direction | Type | Reply |
+|---|---|---|---|
+| `STAGE_ENTITY` | request | `StagingEntity` DTO | `$data = ['success'=>bool,'result'=>array]` |
+| `STAGING_EXISTS` | request | `StagingExistsQuery` DTO | `$data = ['success'=>bool,'result'=>array]` |
+| `STAGE_CUSTOMER` / `_TRANSACTION` / `_PAYMENT` | request | nested array | legacy shape — migrate to DTO |
+
+Replies are `StagingResult::toArray()` plus `_event` / `_module` / `_dto_type`
+tags. **Callers must re-check `is_array($data)` after the call** — if no
+responder ran (module inactive) `$data` is still the DTO, and that must be
+treated as *no responder*, never as success. Full rationale and code shape:
+`AGENTS_ARCH.md` §11.2.
 
 ---
 
@@ -292,37 +349,6 @@ Reminder delivery (popup/email).
 
 **Emitter:** `ksf_FA_Calendar` — `FA_Cal_Module.php:1580`
 **Listener:** `ksf_FA_Calendar` — `hooks.php:255` (self)
-
----
-
-### `ksf_event_closed` — Planned (BR-007, design approved)
-
-Broadcast fired by Calendar AFTER an attendance/work event transitions to
-`closed` (committed). Payload = the canonical EventClosedDto (event_id, title,
-event_type, location, started_at, closed_at, user_id, project_id?, task_id?,
-sales_order_id?, linked_entities[], attendee_emails[], closed_by). Re-close is a
-no-op. Contract: FR-CAL-007-001/002, ARCH-007-event-close-workflow-design.md.
-
-**Emitter:** ksf_FA_Calendar (to implement per FR-CAL-007-002)
-**Listeners (to implement):**
-- `ksf_FA_Timesheets` — bulk member time (FR-TIME-007-002/003)
-- `ksf_FA_TravelExpense` — new-or-existing expense (FR-EXPENSE-007-001)
-- `ksf_FA_ProjectManagement` — task time-window close (FR-PM-007-002)
-- `ksf_FA_Warehouse` — pick-ready re-broadcast on sales-order hybrids (FR-WH-007-001)
-
----
-
-### `ksf_event_classify_attendees` — Planned (BR-007, design approved)
-
-Read-only request on the close flow: any subscriber asks it to partition the
-DTO's `attendee_emails[]` into `member` vs `external`. Responders (PM, HRM,
-CRM, Teams/Warehouse) append only emails they resolve in their OWN identity
-space; caller aggregates (member wins; unclassified external; empty = all
-member). Contract: FR-CAL-007-003, ARCH-007-event-close-workflow-design.md.
-
-**Callers (to implement):** ksf_FA_Timesheets subscriber (FR-TIME-007-002/003)
-**Responders (to implement):** ksf_FA_ProjectManagement (FR-PM-007-001),
-`ksf_FA_HRM` (FR-HRM-007-001), `ksf_FA_CRM` (FR-CRM-007-001)
 
 ---
 
