@@ -46,7 +46,7 @@ pod dir is derived from the **pod name passed in the play** — the recipe sets 
 | Pod dir (`FA/<pod>/`) | Mounted at (`/var/www/html/`) | Mode |
 |---|---|---|
 | `FA/<version>/` (whole packed tree) | `/var/www/html` | ro |
-| `fa_modules/` | `/var/www/html/modules` | rw |
+| `0_ksf_modules/` | `/var/www/html/modules` | rw |
 | `config_db.php` | `/var/www/html/config_db.php` | rw |
 | `installed_extensions.php` | `/var/www/html/installed_extensions.php` | rw |
 | `company/` | `/var/www/html/company` | rw |
